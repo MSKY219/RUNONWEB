@@ -1,0 +1,1876 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>한강 리듬 러너 - 16-Bit Retro Edition</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+  * {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+    background-color: #060612;
+    color: #ffffff;
+    font-family: 'Press Start 2P', 'Courier New', monospace;
+    overflow: hidden;
+    touch-action: manipulation;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  /* 외곽 아케이드 캐비닛 프레임 (109708.png의 시안/핑크 점선 네온 테두리 완벽 재현) */
+  .arcade-cabinet {
+    position: relative;
+    width: 100%;
+    max-width: 430px;
+    height: 100dvh;
+    background: #09081b;
+    display: flex;
+    flex-direction: column;
+    /* 하단 플로팅 아이콘에 가려지지 않도록 하단 여백 확보 */
+    padding: 10px 10px calc(30px + env(safe-area-inset-bottom));
+    overflow: hidden;
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.95);
+  }
+
+  /* 상·좌·우 네온 대시 보더 */
+  .dash-top {
+    position: absolute;
+    top: 2px;
+    left: 12px;
+    right: 12px;
+    height: 4px;
+    background: repeating-linear-gradient(
+      90deg,
+      #3df5ff 0px, #3df5ff 10px,
+      transparent 10px, transparent 18px,
+      #ff4fa3 18px, #ff4fa3 28px,
+      transparent 28px, transparent 36px
+    );
+    z-index: 40;
+    pointer-events: none;
+  }
+
+  .dash-left {
+    position: absolute;
+    top: 10px;
+    bottom: 10px;
+    left: 2px;
+    width: 4px;
+    background: repeating-linear-gradient(
+      180deg,
+      #3df5ff 0px, #3df5ff 8px,
+      transparent 8px, transparent 14px,
+      #ff4fa3 14px, #ff4fa3 22px,
+      transparent 22px, transparent 28px
+    );
+    z-index: 40;
+    pointer-events: none;
+  }
+
+  .dash-right {
+    position: absolute;
+    top: 10px;
+    bottom: 10px;
+    right: 2px;
+    width: 4px;
+    background: repeating-linear-gradient(
+      180deg,
+      #ff4fa3 0px, #ff4fa3 8px,
+      transparent 8px, transparent 14px,
+      #3df5ff 14px, #3df5ff 22px,
+      transparent 22px, transparent 28px
+    );
+    z-index: 40;
+    pointer-events: none;
+  }
+
+  /* 메인 게임 스크린 (시안 내곽선 + 핑크 외곽선 이중 액자) */
+  .screen-container {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    background: #171238;
+    border-radius: 14px;
+    border: 3px solid #3df5ff;
+    box-shadow:
+      0 0 0 2px #09081b,
+      0 0 0 4px #ff4fa3,
+      inset 0 0 18px rgba(0, 0, 0, 0.85);
+    overflow: hidden;
+    cursor: pointer;
+  }
+
+  /* 고해상도 픽셀 아트 캔버스 */
+  canvas#gameCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+  }
+
+  /* 상단 HUD 텍스트 (두꺼운 검은색 도트 외곽선) */
+  .pixel-hud-text {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    line-height: 1.2;
+    letter-spacing: -0.5px;
+    text-shadow:
+      -2px -2px 0 #08071a,
+       2px -2px 0 #08071a,
+      -2px  2px 0 #08071a,
+       2px  2px 0 #08071a,
+       0px  3px 0 #08071a;
+  }
+
+  /* 우측 상단 10칸 게이지 박스 (절대 찌그러지지 않도록 고정 크기 지정) */
+  .gauge-outer-box {
+    width: 116px;
+    height: 22px;
+    background: #121329;
+    border: 2px solid #f2dec4;
+    border-radius: 3px;
+    padding: 2px;
+    box-shadow: 0 3px 0 #000000;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+  }
+
+  .gauge-inner-row {
+    width: 100%;
+    height: 100%;
+    background: #090a17;
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 2px;
+    padding: 1px;
+  }
+
+  .gauge-cell-on {
+    background: #68e82c;
+    box-shadow: inset 0 2px 0 #b8ff78;
+  }
+
+  .gauge-cell-off {
+    background: #262b44;
+  }
+
+  /* 109708.png와 동일한 중앙 유혹 팝업창 (SPEED UP !) */
+  .retro-popup-box {
+    position: absolute;
+    width: 76%;
+    max-width: 260px;
+    background: #0b0e26;
+    border: 2px solid #0d0d18;
+    box-shadow:
+      0 0 0 2px #f2dec4,
+      0 0 0 4px #0d0d18,
+      0 8px 20px rgba(0, 0, 0, 0.8);
+    border-radius: 2px;
+    z-index: 25;
+    transition: top 0.14s ease-out, left 0.14s ease-out;
+  }
+
+  .retro-popup-bar {
+    height: 20px;
+    background: #5ce1f7;
+    border-bottom: 2px solid #0d0d18;
+    box-shadow: inset 0 2px 0 #a6f3ff;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 3px;
+  }
+
+  .retro-close-btn {
+    width: 15px;
+    height: 14px;
+    background: #f25278;
+    border: 1.5px solid #1a1026;
+    box-shadow: inset 1px 1px 0 #ff9ebb;
+    color: #1a1026;
+    font-family: monospace;
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .retro-close-btn:active {
+    transform: scale(0.9);
+    background: #d9385e;
+  }
+
+  .retro-popup-content {
+    padding: 16px 12px 28px;
+    text-align: center;
+    background: #0b0e26;
+  }
+
+  .retro-popup-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+    text-shadow: 2px 2px 0 #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: 10px;
+  }
+
+  /* 하단 아케이드 컨트롤 데크 (109708.png의 사선 컬러 스트라이프 & 입체 STEP! 버튼) */
+  .deck-wrapper {
+    position: relative;
+    height: 98px;
+    width: 100%;
+    margin-top: 6px;
+    flex-shrink: 0;
+    z-index: 30;
+  }
+
+  .deck-surface {
+    width: 100%;
+    height: 100%;
+    border-radius: 14px;
+    border: 3px solid #3df5ff;
+    box-shadow:
+      0 0 0 2px #09081b,
+      0 0 0 4px #ff4fa3,
+      inset 0 3px 0 rgba(255, 255, 255, 0.38),
+      inset 0 -6px 0 #2b1d42;
+    background:
+      linear-gradient(115deg,
+        #f05697 0%, #f05697 24%,
+        #8ceb34 24%, #8ceb34 30%,
+        #ffe033 30%, #ffe033 36%,
+        #2ceef0 36%, #2ceef0 64%,
+        #ffe033 64%, #ffe033 70%,
+        #8ceb34 70%, #8ceb34 76%,
+        #f05697 76%, #f05697 100%
+      );
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 12px;
+    position: relative;
+  }
+
+  /* STEP! 버튼 네이비 하우징 소켓 */
+  .step-housing {
+    background: #1b224a;
+    border: 3px solid #0b0e24;
+    border-radius: 14px;
+    padding: 4px 6px 8px;
+    box-shadow:
+      0 4px 0 #080a1a,
+      inset 0 2px 0 #3b4b8c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* 입체 초록색 STEP! 버튼 */
+  .step-button {
+    width: 124px;
+    height: 54px;
+    background: linear-gradient(180deg, #8cf527 0%, #58d81b 100%);
+    border: 3px solid #0b1124;
+    border-radius: 10px;
+    box-shadow:
+      inset 0 4px 0 #d4ff7a,
+      inset 0 -4px 0 #2e960c,
+      0 6px 0 #1c6612,
+      0 8px 0 #0b1124;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transform: translateY(-2px);
+    transition: transform 0.03s, box-shadow 0.03s;
+  }
+
+  .step-button:active,
+  .step-button.pressed {
+    transform: translateY(4px);
+    box-shadow:
+      inset 0 2px 0 #d4ff7a,
+      inset 0 -2px 0 #2e960c,
+      0 1px 0 #1c6612,
+      0 2px 0 #0b1124;
+  }
+
+  .step-button-text {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 18px;
+    color: #0e1629;
+    letter-spacing: 1px;
+    text-shadow: 1px 1px 0 #c7ff6b;
+  }
+
+  /* 좌·우 십자 방향키 */
+  .dpad-cluster {
+    display: grid;
+    grid-template-columns: repeat(3, 24px);
+    grid-template-rows: repeat(3, 21px);
+    gap: 2px;
+    align-items: center;
+    justify-items: center;
+  }
+
+  .dpad-key {
+    width: 24px;
+    height: 21px;
+    background: #141833;
+    border: 2px solid #090b1a;
+    border-radius: 5px;
+    box-shadow: 0 3px 0 #090b1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .dpad-key:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 #090b1a;
+  }
+
+  @keyframes heartBeatBounce {
+    0%, 100% { transform: scale(1); }
+    40% { transform: scale(1.18); }
+  }
+
+  .heart-pulse {
+    animation: heartBeatBounce 0.16s ease-out;
+  }
+
+  @keyframes damageShake {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(-4px, 2px); }
+    50% { transform: translate(4px, -2px); }
+    75% { transform: translate(-3px, -1px); }
+  }
+
+  .screen-shake {
+    animation: damageShake 0.18s ease-in-out;
+  }
+</style>
+</head>
+<body>
+
+<div class="arcade-cabinet">
+  <div class="dash-top"></div>
+  <div class="dash-left"></div>
+  <div class="dash-right"></div>
+
+  <!-- 상단 메인 게임 스크린 (화면을 직접 터치해도 STEP! 입력 가능) -->
+  <div class="screen-container" id="screenContainer">
+
+    <!-- 상단 HUD 오버레이: 좌측 픽셀 하트 5개 & SCORE / 우측 10칸 게이지 & PROGRESS % -->
+    <div class="absolute top-0 left-0 right-0 pt-3 px-3.5 flex justify-between items-start z-20 pointer-events-none">
+      <!-- 좌측: 하트 5개(초기 HTML 정적 렌더링 포함) & SCORE -->
+      <div class="flex flex-col items-start">
+        <div id="heartsContainer" class="flex items-center gap-1.5 mb-2">
+          <!-- 100% 시작을 위한 하트 5개 꽉 찬 상태 정적 렌더링 -->
+          <svg width="20" height="18" viewBox="0 0 11 10"><path d="M2 0h3v1h1V0h3v1h1v1h1v4h-1v1H9v1H8v1H7v1H4V9H3V8H2V7H1V6H0V2h1V1h1V0z" fill="#0d0e1a"/><path d="M2 1h3v1h1v7H4V8H3V7H2V6H1V2h1V1z" fill="#ff4d79"/><path d="M6 1h3v1h1v4H9v1H8v1H7v1H6V1z" fill="#ff4d79"/><rect x="2" y="2" width="2" height="1" fill="#ff9ebb"/><rect x="2" y="3" width="1" height="1" fill="#ff9ebb"/></svg>
+          <svg width="20" height="18" viewBox="0 0 11 10"><path d="M2 0h3v1h1V0h3v1h1v1h1v4h-1v1H9v1H8v1H7v1H4V9H3V8H2V7H1V6H0V2h1V1h1V0z" fill="#0d0e1a"/><path d="M2 1h3v1h1v7H4V8H3V7H2V6H1V2h1V1z" fill="#ff4d79"/><path d="M6 1h3v1h1v4H9v1H8v1H7v1H6V1z" fill="#ff4d79"/><rect x="2" y="2" width="2" height="1" fill="#ff9ebb"/><rect x="2" y="3" width="1" height="1" fill="#ff9ebb"/></svg>
+          <svg width="20" height="18" viewBox="0 0 11 10"><path d="M2 0h3v1h1V0h3v1h1v1h1v4h-1v1H9v1H8v1H7v1H4V9H3V8H2V7H1V6H0V2h1V1h1V0z" fill="#0d0e1a"/><path d="M2 1h3v1h1v7H4V8H3V7H2V6H1V2h1V1z" fill="#ff4d79"/><path d="M6 1h3v1h1v4H9v1H8v1H7v1H6V1z" fill="#ff4d79"/><rect x="2" y="2" width="2" height="1" fill="#ff9ebb"/><rect x="2" y="3" width="1" height="1" fill="#ff9ebb"/></svg>
+          <svg width="20" height="18" viewBox="0 0 11 10"><path d="M2 0h3v1h1V0h3v1h1v1h1v4h-1v1H9v1H8v1H7v1H4V9H3V8H2V7H1V6H0V2h1V1h1V0z" fill="#0d0e1a"/><path d="M2 1h3v1h1v7H4V8H3V7H2V6H1V2h1V1z" fill="#ff4d79"/><path d="M6 1h3v1h1v4H9v1H8v1H7v1H6V1z" fill="#ff4d79"/><rect x="2" y="2" width="2" height="1" fill="#ff9ebb"/><rect x="2" y="3" width="1" height="1" fill="#ff9ebb"/></svg>
+          <svg width="20" height="18" viewBox="0 0 11 10"><path d="M2 0h3v1h1V0h3v1h1v1h1v4h-1v1H9v1H8v1H7v1H4V9H3V8H2V7H1V6H0V2h1V1h1V0z" fill="#0d0e1a"/><path d="M2 1h3v1h1v7H4V8H3V7H2V6H1V2h1V1z" fill="#ff4d79"/><path d="M6 1h3v1h1v4H9v1H8v1H7v1H6V1z" fill="#ff4d79"/><rect x="2" y="2" width="2" height="1" fill="#ff9ebb"/><rect x="2" y="3" width="1" height="1" fill="#ff9ebb"/></svg>
+        </div>
+        <div class="pixel-hud-text">
+          <span class="text-[#ffe033]">SCORE</span>
+          <span id="scoreDisplay" class="text-[#ffffff] ml-1">000000</span>
+        </div>
+      </div>
+
+      <!-- 우측: 10칸 초록 게이지 바(고정 크기) & PROGRESS 0% -->
+      <div class="flex flex-col items-end">
+        <div class="gauge-outer-box">
+          <div id="gaugeContainer" class="gauge-inner-row">
+            <div class="gauge-cell-off"></div>
+            <div class="gauge-cell-off"></div>
+            <div class="gauge-cell-off"></div>
+            <div class="gauge-cell-off"></div>
+            <div class="gauge-cell-off"></div>
+            <div class="gauge-cell-off"></div>
+            <div class="gauge-cell-off"></div>
+            <div class="gauge-cell-off"></div>
+            <div class="gauge-cell-off"></div>
+            <div class="gauge-cell-off"></div>
+          </div>
+        </div>
+        <div class="pixel-hud-text">
+          <span class="text-[#ffe033]">PROGRESS</span>
+          <span id="progressDisplay" class="text-[#ffffff] ml-1">0%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 고해상도 5레이어 픽셀 아트 캔버스 (240 x 320) -->
+    <canvas id="gameCanvas" width="240" height="320"></canvas>
+
+    <!-- 시작 안내 문구 (최초 실행 대기 시 표시) -->
+    <div id="startScreenOverlay" class="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none mt-20">
+      <div class="animate-pulse bg-[#0b0e26]/90 text-[#ffe033] px-4 py-3 border-2 border-[#ff4fa3] rounded-lg shadow-[0_0_15px_rgba(255,79,163,0.5)] font-['Press_Start_2P'] text-[12px] tracking-wide text-center leading-loose">
+        하단 [STEP!]<br>버튼을 눌러<br>시작하기
+      </div>
+    </div>
+
+    <!-- 하단 심박수(ECG) 라인을 직접 가리는 유혹 팝업창 -->
+    <div id="temptationPopup" class="retro-popup-box hidden" style="top: 73%; left: 40%; transform: translate(-50%, -50%);">
+      <div id="popupHeaderBar" class="retro-popup-bar">
+        <button id="popupCloseBtn" class="retro-close-btn" aria-label="Close">x</button>
+      </div>
+      <div class="retro-popup-content flex flex-col items-center">
+        <div class="retro-popup-title !mb-2 !text-[12px] !leading-snug break-keep">
+          <span id="popupMainTitle">라면 냄새가 난다..</span>
+        </div>
+        <div id="popupSubTitle" class="text-[#cbd5e1] text-[11px] font-sans break-keep leading-tight max-w-[210px] text-center pb-1">
+          한강 편의점 라면 냄새의 유혹
+        </div>
+      </div>
+    </div>
+
+    <!-- 100% 완주 또는 체력 소진 시 결과 화면 모달 -->
+    <div id="resultModal" class="hidden absolute inset-0 bg-[#070616]/90 z-30 flex flex-col items-center justify-center p-4 text-center">
+      <div class="w-full max-w-[300px] bg-[#11132e] border-4 border-[#3df5ff] rounded-xl p-4 shadow-[0_0_0_3px_#ff4fa3,0_12px_28px_rgba(0,0,0,0.95)]">
+        <div id="resultBadge" class="inline-block bg-[#8ceb34] text-[#090b1a] text-[9px] font-black px-2 py-0.5 rounded mb-2">
+          HAN RIVER COMPLETE!
+        </div>
+        <h2 id="resultTitle" class="text-base font-black text-[#ffe033] mb-1 font-sans">
+          🎉 한강 종주 러닝 완주!
+        </h2>
+        <p id="resultSubtitle" class="text-[11px] text-[#cbd5e1] font-sans mb-3 hidden"></p>
+
+        <div class="grid grid-cols-2 gap-2 bg-[#080917] border-2 border-[#2b305c] rounded-lg p-2.5 mb-3 font-sans">
+          <div>
+            <div class="text-[10px] text-[#94a3b8]">리듬 정확도</div>
+            <div id="resultAccuracy" class="text-sm font-black text-[#8ceb34]">98.0%</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-[#94a3b8]">최종 스코어</div>
+            <div id="resultScore" class="text-sm font-black text-[#ffe033]">005420</div>
+          </div>
+        </div>
+
+        <p class="text-[11px] text-[#e2e8f0] font-sans leading-relaxed bg-[#191d42] border-l-4 border-[#3df5ff] p-2 rounded text-left mb-3 break-keep">
+          "수많은 유혹이 눈앞을 가려도, 조급해하지 않고 나만의 페이스로 천천히 발을 내딛다 보면 어느새 끝까지 완주할 수 있어요! 멈추지 않는 당신의 건강한 러닝을 응원합니다 🏃‍♂️✨"
+        </p>
+
+        <button id="retryBtn" class="w-full py-2.5 bg-gradient-to-b from-[#8cf527] to-[#4ec411] text-[#090b1a] font-black text-xs rounded-lg border-2 border-[#000] shadow-[0_4px_0_#1c6612] active:translate-y-1 font-sans">
+          ▶ 다시 달리기 (REPLAY)
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 하단 아케이드 컨트롤 데크 -->
+  <div class="deck-wrapper">
+    <div class="deck-surface">
+
+      <!-- 중앙 입체 초록색 STEP! 버튼 (양옆 십자키 제거됨) -->
+      <div class="step-housing">
+        <button id="stepBtn" class="step-button">
+          <span class="step-button-text">STEP!</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // ============================================================================
+  // 1. 픽셀 아트 5단 분리 레이어 엔진 (아침 · 해질녘 · 야경)
+  // ============================================================================
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  // 캔버스 픽셀이 가로/세로로 찌그러지지 않도록 1:1 정사각형 픽셀 비율 유지
+  let VIEW_W = 240;
+  let VIEW_H = 320;
+
+  function syncSquarePixelAspect() {
+    const container = document.getElementById('screenContainer');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      VIEW_W = 240;
+      VIEW_H = Math.max(296, Math.min(360, Math.round(240 * (rect.height / rect.width))));
+      if (canvas.width !== VIEW_W || canvas.height !== VIEW_H) {
+        canvas.width = VIEW_W;
+        canvas.height = VIEW_H;
+        ctx.imageSmoothingEnabled = false;
+      }
+    }
+  }
+  window.addEventListener('resize', syncSquarePixelAspect);
+
+  const THEME_MODES = ['auto', 'morning', 'sunset', 'night'];
+  let selectedThemeMode = 'auto';
+  let activeTimeOfDay = 'morning'; // 첫 화면은 아침 시간대(63빌딩)로 변경
+
+  const layerTiles = {
+    morning: {},
+    sunset: {},
+    night: {}
+  };
+
+  function px(c, x, y, w, h, color) {
+    c.fillStyle = color;
+    c.fillRect(Math.floor(x), Math.floor(y), Math.floor(w), Math.floor(h));
+  }
+
+  function createOffscreenCanvas(w, h) {
+    const off = document.createElement('canvas');
+    off.width = w;
+    off.height = h;
+    const octx = off.getContext('2d');
+    octx.imageSmoothingEnabled = false;
+    return { canvas: off, ctx: octx };
+  }
+
+  // --- Layer 1: 하늘 (스캔라인 & 별빛/구름) ---
+  function buildSkyTile(theme) {
+    const { canvas: off, ctx: c } = createOffscreenCanvas(480, 140);
+
+    const palettes = {
+      morning: ['#3fa7f5', '#52b6fa', '#69c5ff', '#82d3ff', '#9be0ff', '#b5ebff', '#cef3ff', '#e3f9ff'],
+      sunset:  ['#24174a', '#381e5c', '#57276b', '#7c3273', '#a8426f', '#d45b63', '#f27d52', '#ffab5e'],
+      night:   ['#130f33', '#17133b', '#1c1745', '#211b4f', '#262059', '#2c2563', '#332b6e', '#3a3178']
+    };
+
+    const bands = palettes[theme];
+    const bandH = Math.ceil(140 / bands.length);
+    for (let i = 0; i < bands.length; i++) {
+      px(c, 0, i * bandH, 480, bandH + 1, bands[i]);
+    }
+
+    for (let y = 0; y < 140; y += 2) {
+      px(c, 0, y, 480, 1, theme === 'morning' ? 'rgba(255,255,255,0.12)' : 'rgba(8,6,22,0.30)');
+    }
+
+    if (theme === 'morning') {
+      const clouds = [
+        { x: 20, y: 20, w: 68, h: 22 },
+        { x: 145, y: 12, w: 46, h: 14 },
+        { x: 240, y: 24, w: 82, h: 24 },
+        { x: 375, y: 14, w: 64, h: 20 }
+      ];
+      clouds.forEach(cl => {
+        px(c, cl.x + 6, cl.y + 4, cl.w - 12, cl.h, '#f5d0e6');
+        px(c, cl.x, cl.y + 6, cl.w, cl.h - 4, '#ffffff');
+        px(c, cl.x + 10, cl.y, cl.w - 20, cl.h - 2, '#ffffff');
+        px(c, cl.x + 18, cl.y - 4, cl.w - 36, 6, '#ffffff');
+      });
+    } else {
+      const stars = [
+        [28, 14, '#7ce8ff', true], [65, 28, '#ffffff', false], [92, 10, '#ff8fab', false],
+        [134, 38, '#ffe066', false], [176, 18, '#ffffff', true], [218, 29, '#7ce8ff', false],
+        [264, 12, '#ffffff', false], [308, 22, '#ff8fab', true], [348, 34, '#7ce8ff', false],
+        [396, 16, '#ffe066', true], [442, 26, '#ffffff', false]
+      ];
+      stars.forEach(([sx, sy, col, isCross]) => {
+        px(c, sx, sy, 2, 2, col);
+        if (isCross) {
+          px(c, sx - 2, sy, 6, 1, col);
+          px(c, sx, sy - 2, 1, 6, col);
+        }
+      });
+    }
+
+    return off;
+  }
+
+  // --- Layer 2: 서울 도시 스카이라인 & 3대 랜드마크 (남산타워 · 63빌딩 · 롯데타워) ---
+  function buildCityTile(theme) {
+    const { canvas: off, ctx: c } = createOffscreenCanvas(720, 126);
+
+    const hillColor = theme === 'morning' ? '#1f6f3d' : (theme === 'sunset' ? '#161436' : '#0d1433');
+    const hillSubColor = theme === 'morning' ? '#2c8a4e' : '#151c42';
+    const bldgDark = theme === 'morning' ? '#243554' : '#090d22';
+    const bldgBody = theme === 'morning' ? '#3d5885' : (theme === 'sunset' ? '#181432' : '#121938');
+
+    // 산 능선 실루엣 (x=120: 남산, x=350: 여의도 원경 산, x=580: 잠실 원경 산)
+    for (let x = 0; x < 720; x++) {
+      const d1 = Math.abs(x - 120);
+      const h1 = d1 < 118 ? Math.floor(Math.pow(Math.cos((d1 / 118) * (Math.PI / 2)), 1.35) * 40) : 0;
+      const d2 = Math.abs(x - 350);
+      const h2 = d2 < 110 ? Math.floor(Math.cos((d2 / 110) * (Math.PI / 2)) * 22) : 0;
+      const d3 = Math.abs(x - 580);
+      const h3 = d3 < 115 ? Math.floor(Math.cos((d3 / 115) * (Math.PI / 2)) * 24) : 0;
+
+      const h = Math.max(8, h1, h2, h3);
+      px(c, x, 114 - h, 1, h + 4, hillColor);
+      if (theme === 'morning' && h > 14) {
+        px(c, x, 114 - h, 1, 3, hillSubColor);
+      }
+    }
+
+    // 남산 정상 능선 & 산비탈 불빛 군락 (109708.png와 동일)
+    const summitCluster = [
+      [108, 76], [111, 75], [114, 75], [117, 74], [120, 74], [123, 75], [126, 76], [129, 77],
+      [104, 78], [109, 78], [115, 77], [119, 76], [122, 77], [127, 79], [133, 79],
+      [96, 82], [101, 81], [136, 81], [142, 83], [88, 86], [149, 86], [156, 89]
+    ];
+    summitCluster.forEach(([lx, ly], idx) => {
+      px(c, lx, ly, (idx % 2 === 0) ? 2 : 1, 1, theme === 'morning' ? '#bef264' : (idx % 3 === 0 ? '#ff9233' : '#ffd166'));
+    });
+
+    for (let hx = 42; hx < 182; hx += 4) {
+      const distFromPeak = Math.abs(hx - 115);
+      const topLimit = 84 + Math.floor(distFromPeak * 0.22);
+      for (let hy = topLimit; hy < 110; hy += 3) {
+        if (((hx * 17 + hy * 31) % 7) < 3) {
+          const isWarm = ((hx + hy) % 3 !== 0);
+          const dotCol = theme === 'morning'
+            ? (isWarm ? '#e2e8f0' : '#bae6fd')
+            : (isWarm ? '#ffbe55' : '#ff7b54');
+          px(c, hx, hy, (hx % 8 === 0) ? 2 : 1, 1, dotCol);
+        }
+      }
+    }
+
+    // 랜드마크 1: 남산서울타워 (x = 120)
+    const ntx = 120;
+    const nty = 74;
+    px(c, ntx - 4, nty - 2, 9, 2, '#d9a05b');
+    px(c, ntx - 2, nty - 4, 5, 2, '#3a4e8c');
+    px(c, ntx - 1, nty - 18, 3, 14, theme === 'morning' ? '#cbd5e1' : '#1e64b8');
+    px(c, ntx, nty - 18, 1, 8, theme === 'morning' ? '#ffffff' : '#00f0ff');
+    px(c, ntx, nty - 10, 1, 6, '#70f542');
+    px(c, ntx - 4, nty - 22, 9, 4, '#19254d');
+    px(c, ntx - 4, nty - 21, 9, 2, '#00f0ff');
+    px(c, ntx - 2, nty - 24, 5, 2, '#38bdf8');
+    px(c, ntx, nty - 36, 1, 12, '#ff3355');
+    px(c, ntx, nty - 33, 1, 2, '#ffffff');
+    px(c, ntx, nty - 28, 1, 2, '#ffffff');
+    px(c, ntx - 1, nty - 37, 3, 1, '#ff3355');
+    px(c, ntx - 12, nty - 14, 2, 16, '#7c2d42');
+    px(c, ntx - 11, nty - 20, 1, 6, '#d9465f');
+    px(c, ntx - 12, nty - 21, 3, 2, '#ff3355');
+
+    // 랜드마크 2: 여의도 63빌딩 (x = 338)
+    const b63x = 338;
+    if (theme !== 'morning') {
+      px(c, b63x - 3, 34, 34, 82, 'rgba(255, 190, 40, 0.16)');
+      px(c, b63x - 2, 35, 32, 81, 'rgba(255, 210, 60, 0.25)');
+    }
+    px(c, b63x - 1, 34, 30, 82, '#120e24');
+    px(c, b63x + 2, 29, 24, 5, '#120e24');
+    px(c, b63x + 14, 22, 2, 7, '#ff4d6d');
+    px(c, b63x, 35, 28, 81, '#d98a1e');
+    px(c, b63x + 2, 35, 22, 81, '#f5b82e');
+    px(c, b63x + 4, 35, 14, 81, '#ffe875');
+    px(c, b63x + 6, 35, 6, 81, '#fff9cc');
+    for (let wy = 38; wy < 114; wy += 4) {
+      px(c, b63x + 1, wy, 26, 1, '#854d0e');
+    }
+    px(c, b63x, 58, 28, 2, '#593305');
+    px(c, b63x, 84, 28, 2, '#593305');
+
+    // 랜드마크 3: 잠실 롯데월드타워 (x = 580)
+    const ltx = 580;
+    const ltBaseCol = theme === 'morning' ? '#60a5fa' : '#1b5699';
+    const ltMidCol  = theme === 'morning' ? '#93c5fd' : '#298be6';
+    const ltGlowCol = theme === 'morning' ? '#ffffff' : '#6beeff';
+    if (theme !== 'morning') {
+      px(c, ltx - 2, 14, 28, 102, 'rgba(0, 225, 255, 0.18)');
+    }
+    px(c, ltx, 68, 24, 48, ltBaseCol);
+    px(c, ltx + 2, 48, 20, 20, ltBaseCol);
+    px(c, ltx + 4, 30, 16, 18, ltMidCol);
+    px(c, ltx + 6, 16, 12, 14, ltMidCol);
+    px(c, ltx + 7, 8, 4, 8, ltGlowCol);
+    px(c, ltx + 13, 8, 4, 8, ltGlowCol);
+    px(c, ltx + 11, 14, 2, 102, ltGlowCol);
+    for (let ly = 22; ly < 112; ly += 9) {
+      px(c, ltx + 4, ly, 16, 1, ltGlowCol);
+    }
+
+    // 강변 빌딩 숲
+    const buildings = [
+      { x: 0, w: 12, h: 20, style: 'warm' },
+      { x: 18, w: 15, h: 30, style: 'dots' },
+      { x: 36, w: 22, h: 22, style: 'cluster' },
+      { x: 112, w: 16, h: 24, style: 'warm' },
+      { x: 140, w: 18, h: 32, style: 'cyan' },
+      { x: 166, w: 18, h: 28, style: 'dots' },
+      { x: 192, w: 22, h: 42, style: 'octagon' },
+      { x: 216, w: 14, h: 24, style: 'warm' },
+      { x: 230, w: 12, h: 34, style: 'stripes' },
+      { x: 248, w: 20, h: 32, style: 'cyan' },
+      { x: 272, w: 24, h: 24, style: 'warm' },
+      { x: 302, w: 28, h: 20, style: 'cluster' },
+      { x: 374, w: 20, h: 32, style: 'dots' },
+      { x: 400, w: 24, h: 40, style: 'octagon' },
+      { x: 428, w: 18, h: 28, style: 'stripes' },
+      { x: 452, w: 22, h: 24, style: 'warm' },
+      { x: 484, w: 22, h: 28, style: 'dots' },
+      { x: 510, w: 26, h: 22, style: 'cluster' },
+      { x: 542, w: 20, h: 34, style: 'cyan' },
+      { x: 564, w: 14, h: 24, style: 'warm' },
+      { x: 610, w: 24, h: 42, style: 'octagon' },
+      { x: 638, w: 18, h: 28, style: 'stripes' },
+      { x: 662, w: 22, h: 32, style: 'cyan' },
+      { x: 690, w: 24, h: 26, style: 'dots' }
+    ];
+
+    buildings.forEach(b => {
+      const by = 116 - b.h;
+      px(c, b.x, by, b.w, b.h, bldgDark);
+      px(c, b.x + 1, by + 1, b.w - 2, b.h - 1, bldgBody);
+
+      if (b.style === 'octagon') {
+        px(c, b.x + 3, by - 4, b.w - 6, 4, bldgDark);
+        px(c, b.x + 5, by - 7, 1, 3, '#ff3b6b');
+        px(c, b.x + b.w - 6, by - 7, 1, 3, '#ff3b6b');
+      }
+
+      const winWarm = theme === 'morning' ? '#e0f2fe' : '#ffd166';
+      const winCyan = theme === 'morning' ? '#ffffff' : '#67e8f9';
+
+      for (let wy = by + 3; wy < 113; wy += 3) {
+        if (b.style === 'stripes') {
+          px(c, b.x + 2, wy, b.w - 4, 1, winWarm);
+        } else if (b.style === 'octagon') {
+          px(c, b.x + 3, wy, 3, 1, winWarm);
+          px(c, b.x + 9, wy, 3, 1, winCyan);
+          px(c, b.x + b.w - 6, wy, 3, 1, winWarm);
+        } else if (b.style === 'cyan') {
+          px(c, b.x + 2, wy, 3, 1, winCyan);
+          px(c, b.x + 8, wy, 3, 1, winCyan);
+          px(c, b.x + b.w - 5, wy, 2, 1, winWarm);
+        } else {
+          if ((wy + b.x) % 2 === 0) px(c, b.x + 2, wy, 2, 1, winWarm);
+          px(c, b.x + 6, wy, 2, 1, winWarm);
+          if (b.w > 16) px(c, b.x + 11, wy, 2, 1, winCyan);
+        }
+      }
+    });
+
+    // 강변 옹벽과 가로등
+    px(c, 0, 115, 720, 2, theme === 'morning' ? '#cbd5e1' : '#d99b52');
+    px(c, 0, 117, 720, 9, '#080a1a');
+    for (let pxX = 8; pxX < 720; pxX += 18) {
+      px(c, pxX, 113, 2, 2, '#ffe066');
+      px(c, pxX, 119, 1, 4, '#64748b');
+    }
+
+    return off;
+  }
+
+  // --- Layer 3: 한강 물결 & 반사광 ---
+  function buildWaterTile(theme) {
+    const { canvas: off, ctx: c } = createOffscreenCanvas(480, 62);
+
+    const baseWater = theme === 'morning' ? '#1e90ff' : (theme === 'sunset' ? '#3d2666' : '#0d3562');
+    const midWater  = theme === 'morning' ? '#2da2ff' : (theme === 'sunset' ? '#592e73' : '#12437a');
+    const deepWater = theme === 'morning' ? '#1577d6' : (theme === 'sunset' ? '#2a1b4e' : '#092547');
+
+    px(c, 0, 0, 480, 62, baseWater);
+    px(c, 0, 0, 480, 8, deepWater);
+    px(c, 0, 20, 480, 22, midWater);
+
+    const c1 = theme === 'morning' ? '#ffffff' : (theme === 'sunset' ? '#ff9e44' : '#ffd166');
+    const c2 = theme === 'morning' ? '#a6e9ff' : (theme === 'sunset' ? '#ff5c77' : '#00f0ff');
+    const c3 = theme === 'morning' ? '#5cc3ff' : (theme === 'sunset' ? '#8c468c' : '#2874c9');
+
+    for (let y = 2; y < 58; y += 2) {
+      for (let x = 0; x < 480; x += 32) {
+        const offset = (y * 19 + x) % 480;
+        const len = 6 + ((x + y) % 14);
+        px(c, offset, y, len, 1, c3);
+        if ((x + y) % 5 === 0) {
+          px(c, (offset + 12) % 480, y, Math.max(4, len - 4), 1, y < 18 ? c1 : c2);
+        }
+      }
+    }
+
+    return off;
+  }
+
+  // --- Layer 4: 우레탄 러닝 트랙 도로 (상단 차선: 러너 주행 / 하단 차선: 심박수 ECG 라인) ---
+  function buildTrackTile(theme) {
+    const { canvas: off, ctx: c } = createOffscreenCanvas(240, 96);
+
+    const bankTop = theme === 'morning' ? '#389e48' : (theme === 'sunset' ? '#4a5228' : '#1c4d2c');
+    const bankMid = theme === 'morning' ? '#287a35' : (theme === 'sunset' ? '#333b1c' : '#133820');
+    px(c, 0, 0, 240, 12, bankTop);
+    for (let y = 1; y < 12; y += 2) {
+      px(c, 0, y, 240, 1, bankMid);
+    }
+
+    px(c, 0, 12, 240, 2, '#e2dce8');
+    px(c, 0, 14, 240, 2, '#8a6b7c');
+
+    const trackBase = theme === 'morning' ? '#9e3b33' : (theme === 'sunset' ? '#782929' : '#592030');
+    const trackLine = theme === 'morning' ? '#872f28' : (theme === 'sunset' ? '#5e1d20' : '#451624');
+    px(c, 0, 16, 240, 74, trackBase);
+    for (let y = 17; y < 90; y += 2) {
+      px(c, 0, y, 240, 1, trackLine);
+    }
+
+    for (let i = 0; i < 90; i++) {
+      const tx = (i * 29) % 240;
+      const ty = 18 + ((i * 17) % 68);
+      px(c, tx, ty, 2, 1, 'rgba(0,0,0,0.18)');
+    }
+
+    // 노란 중앙 차선 (y = 48~50): 러너는 이 선 위쪽을 달리고, 심박수(ECG)는 이 선 아래쪽(y=68)을 흐름
+    px(c, 0, 48, 240, 3, '#c9a227');
+    px(c, 0, 49, 240, 1, '#ffe866');
+
+    px(c, 0, 90, 240, 3, '#e2dce8');
+    px(c, 0, 93, 240, 3, '#7a7294');
+
+    return off;
+  }
+
+  // --- Layer 5: 최전경 잔디밭 & 수풀 ---
+  function buildForegroundBushTile(theme) {
+    const { canvas: off, ctx: c } = createOffscreenCanvas(480, 64);
+
+    const grassBg   = theme === 'morning' ? '#2c8a38' : (theme === 'sunset' ? '#26381e' : '#113620');
+    const grassLine = theme === 'morning' ? '#216e2b' : (theme === 'sunset' ? '#1b2915' : '#0c2616');
+    const outlineC  = '#07170d';
+    const leafDark  = theme === 'morning' ? '#195424' : (theme === 'sunset' ? '#192b16' : '#0f301b');
+    const leafMid   = theme === 'morning' ? '#328f3e' : (theme === 'sunset' ? '#3b4f24' : '#1f5c32');
+    const leafLight = theme === 'morning' ? '#6be055' : (theme === 'sunset' ? '#7a7832' : '#3a8c4a');
+
+    px(c, 0, 0, 480, 64, grassBg);
+    for (let y = 1; y < 64; y += 2) {
+      px(c, 0, y, 480, 1, grassLine);
+    }
+
+    function drawPixelBushMound(cx, cy, radius) {
+      const blobs = [
+        [0, 0, radius],
+        [-radius * 0.6, 4, radius * 0.8],
+        [radius * 0.6, 4, radius * 0.8],
+        [-radius * 1.1, 9, radius * 0.65],
+        [radius * 1.1, 9, radius * 0.65]
+      ];
+      blobs.forEach(([bx, by, r]) => {
+        for (let dy = -r; dy <= r; dy += 2) {
+          const span = Math.floor(Math.sqrt(Math.max(0, r * r - dy * dy)));
+          px(c, cx + bx - span - 2, cy + by + dy - 2, (span + 2) * 2, 3, outlineC);
+        }
+      });
+      blobs.forEach(([bx, by, r]) => {
+        for (let dy = -r; dy <= r; dy += 2) {
+          const span = Math.floor(Math.sqrt(Math.max(0, r * r - dy * dy)));
+          px(c, cx + bx - span, cy + by + dy, span * 2, 3, leafDark);
+        }
+      });
+      blobs.forEach(([bx, by, r]) => {
+        px(c, cx + bx - r * 0.7, cy + by - r * 0.7, r * 1.4, r * 1.1, leafMid);
+        for (let lx = -r * 0.6; lx <= r * 0.5; lx += 5) {
+          px(c, cx + bx + lx, cy + by - r * 0.75 + (Math.abs(lx) % 4), 4, 2, leafLight);
+          px(c, cx + bx + lx + 1, cy + by - r * 0.45 + (Math.abs(lx) % 5), 3, 2, leafLight);
+        }
+      });
+    }
+
+    const bushPositions = [18, 86, 198, 258, 342, 434];
+    bushPositions.forEach((bx, idx) => {
+      drawPixelBushMound(bx, 42 + (idx % 2) * 4, 18 + (idx % 3) * 3);
+    });
+
+    return off;
+  }
+
+  function initAllBackgroundLayers() {
+    ['morning', 'sunset', 'night'].forEach(theme => {
+      layerTiles[theme].sky   = buildSkyTile(theme);
+      layerTiles[theme].city  = buildCityTile(theme);
+      layerTiles[theme].water = buildWaterTile(theme);
+      layerTiles[theme].track = buildTrackTile(theme);
+      layerTiles[theme].bush  = buildForegroundBushTile(theme);
+    });
+  }
+
+  // ============================================================================
+  // 2. 시안 A (High-Vis Trail Runner) 16비트 6프레임 픽셀 스프라이트 엔진
+  //    빨간 러닝 캡 + 주황-레드 후드 윈드브레이커 + 블랙 러닝 팬츠 + 러닝화
+  // ============================================================================
+  let runnerFrames = [];
+
+  function drawRunnerFrameOptionA(c, frameIdx) {
+    // 프레임별 상하 바운스 (달리기 탄성)
+    const bounceOffset = [1, 2, 2, 1, 0, 0][frameIdx];
+    const ox = 8;
+    const oy = 4 + bounceOffset;
+
+    const COL = {
+      out: '#120e17',       // 선명한 외곽선 블랙
+      capLight: '#e63946',  // 빨간 모자 하이라이트
+      capMain: '#c1121f',   // 빨간 모자 기본
+      capDark: '#780000',   // 빨간 모자 음영/챙 아래
+      hairDark: '#2b1810',  // 짙은 갈색 머리카락 음영
+      hairMain: '#4a2c1d',  // 갈색 머리카락 기본
+      skinMain: '#f4b386',  // 피부 기본
+      skinShade: '#d98a5f', // 피부 음영
+      jktLight: '#ff6b35',  // 주황-레드 후드 자켓 하이라이트
+      jktMain: '#f2421b',   // 주황-레드 후드 자켓 기본
+      jktDark: '#b82509',   // 주황-레드 후드 자켓 음영
+      zipper: '#221c29',    // 자켓 지퍼/안감 라인
+      pantDark: '#151621',  // 블랙 러닝 팬츠 기본
+      pantHigh: '#2e3147',  // 블랙 러닝 팬츠 근육/무릎 하이라이트
+      shoeMain: '#1e2640',  // 러닝화 갑피
+      shoeSole: '#ffffff',  // 러닝화 흰색 미드솔
+      shoePoint: '#7ce8ff'  // 러닝화 포인트
+    };
+
+    // 타원/폴리곤 도트 채우기 헬퍼 (1x1 정방형 도트 단위)
+    function dot(x, y, w, h, color) {
+      px(c, ox + x, oy + y, w, h, color);
+    }
+
+    // 1x1 브레젠험 픽셀 라인 (두께 지원, 외곽선 자동 처리용)
+    function drawLimb(x0, y0, x1, y1, thickness, innerColor, highlightColor) {
+      const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+      // 1단계: 검은 외곽선
+      for (let i = 0; i <= steps; i++) {
+        const x = Math.round(x0 + ((x1 - x0) * i) / steps);
+        const y = Math.round(y0 + ((y1 - y0) * i) / steps);
+        dot(x - 1, y - 1, thickness + 2, thickness + 2, COL.out);
+      }
+      // 2단계: 내부 메인 컬러
+      for (let i = 0; i <= steps; i++) {
+        const x = Math.round(x0 + ((x1 - x0) * i) / steps);
+        const y = Math.round(y0 + ((y1 - y0) * i) / steps);
+        dot(x, y, thickness, thickness, innerColor);
+        if (highlightColor && thickness >= 3) {
+          dot(x + thickness - 1, y, 1, thickness - 1, highlightColor);
+        }
+      }
+    }
+
+    function drawRunningShoe(fx, fy, tiltedUp) {
+      if (tiltedUp) {
+        // 앞발 착지/추진 시 살짝 들린 러닝화
+        dot(fx - 2, fy - 1, 9, 5, COL.out);
+        dot(fx - 1, fy, 7, 3, COL.shoeMain);
+        dot(fx + 3, fy, 2, 1, COL.shoePoint);
+        dot(fx - 1, fy + 2, 6, 1, COL.shoeSole);
+        dot(fx + 5, fy + 1, 2, 1, COL.shoeSole);
+      } else {
+        // 뒷발 킥오프/수평 러닝화
+        dot(fx - 2, fy - 1, 9, 5, COL.out);
+        dot(fx - 1, fy, 7, 3, COL.shoeMain);
+        dot(fx + 2, fy, 2, 1, COL.shoePoint);
+        dot(fx - 1, fy + 3, 7, 1, COL.shoeSole);
+      }
+    }
+
+    // 6프레임 관절 좌표 데이터 (시안 A의 6단계 다리/팔 교차와 완벽히 일치)
+    const poses = [
+      // Frame 0: 오른다리 앞으로 뻗고 왼다리 뒤로 접어 올림
+      {
+        backHip: [19, 31], backKnee: [14, 38], backFoot: [7, 37], backShoeUp: false,
+        frontHip: [21, 31], frontKnee: [26, 38], frontFoot: [29, 45], frontShoeUp: true,
+        backShld: [19, 20], backElbow: [13, 25], backHand: [12, 30],
+        frontShld: [22, 20], frontElbow: [26, 26], frontHand: [32, 23]
+      },
+      // Frame 1: 앞발 착지 직전 & 뒷발 낮게 뻗음
+      {
+        backHip: [19, 31], backKnee: [14, 38], backFoot: [8, 39], backShoeUp: false,
+        frontHip: [21, 31], frontKnee: [25, 38], frontFoot: [28, 45], frontShoeUp: true,
+        backShld: [19, 20], backElbow: [14, 25], backHand: [13, 30],
+        frontShld: [22, 20], frontElbow: [25, 26], frontHand: [31, 24]
+      },
+      // Frame 2: 중간 교차 (무릎이 서로 스치며 추진 준비)
+      {
+        backHip: [19, 31], backKnee: [16, 38], backFoot: [10, 37], backShoeUp: false,
+        frontHip: [21, 31], frontKnee: [25, 38], frontFoot: [27, 46], frontShoeUp: false,
+        backShld: [19, 20], backElbow: [15, 25], backHand: [15, 30],
+        frontShld: [22, 20], frontElbow: [25, 26], frontHand: [30, 24]
+      },
+      // Frame 3: 왼무릎을 앞으로 높이 차올림 (High Knee Drive)
+      {
+        backHip: [19, 31], backKnee: [16, 38], backFoot: [11, 37], backShoeUp: false,
+        frontHip: [21, 31], frontKnee: [26, 37], frontFoot: [25, 45], frontShoeUp: false,
+        backShld: [19, 20], backElbow: [15, 25], backHand: [14, 29],
+        frontShld: [22, 20], frontElbow: [25, 25], frontHand: [31, 23]
+      },
+      // Frame 4: 공중 도약! 뒷다리 길게 뻗어 지면 박차고 앞무릎 높게 드라이브
+      {
+        backHip: [19, 31], backKnee: [15, 39], backFoot: [10, 45], backShoeUp: true,
+        frontHip: [21, 31], frontKnee: [28, 36], frontFoot: [23, 41], frontShoeUp: true,
+        backShld: [19, 20], backElbow: [14, 26], backHand: [13, 30],
+        frontShld: [22, 20], frontElbow: [26, 25], frontHand: [32, 22]
+      },
+      // Frame 5: 최대 보폭 활공 (Full Stride)
+      {
+        backHip: [19, 31], backKnee: [14, 38], backFoot: [8, 38], backShoeUp: false,
+        frontHip: [21, 31], frontKnee: [26, 38], frontFoot: [29, 45], frontShoeUp: true,
+        backShld: [19, 20], backElbow: [13, 25], backHand: [12, 30],
+        frontShld: [22, 20], frontElbow: [26, 26], frontHand: [32, 23]
+      }
+    ];
+
+    const p = poses[frameIdx];
+
+    // 1. 뒤쪽 팔 (자켓 소매 + 주먹)
+    drawLimb(p.backShld[0], p.backShld[1], p.backElbow[0], p.backElbow[1], 4, COL.jktDark, null);
+    drawLimb(p.backElbow[0], p.backElbow[1], p.backHand[0], p.backHand[1], 3, COL.jktDark, null);
+    dot(p.backHand[0] - 1, p.backHand[1] - 1, 5, 5, COL.out);
+    dot(p.backHand[0], p.backHand[1], 3, 3, COL.skinShade);
+
+    // 2. 뒤쪽 다리 & 러닝화
+    drawLimb(p.backHip[0], p.backHip[1], p.backKnee[0], p.backKnee[1], 4, COL.pantDark, null);
+    drawLimb(p.backKnee[0], p.backKnee[1], p.backFoot[0], p.backFoot[1], 3, COL.pantDark, null);
+    drawRunningShoe(p.backFoot[0], p.backFoot[1], p.backShoeUp);
+
+    // 3. 앞쪽 다리 & 러닝화 (근육 하이라이트 포함)
+    drawLimb(p.frontHip[0], p.frontHip[1], p.frontKnee[0], p.frontKnee[1], 4, COL.pantDark, COL.pantHigh);
+    drawLimb(p.frontKnee[0], p.frontKnee[1], p.frontFoot[0], p.frontFoot[1], 3, COL.pantDark, COL.pantHigh);
+    drawRunningShoe(p.frontFoot[0], p.frontFoot[1], p.frontShoeUp);
+
+    // 4. 몸통: 주황-레드 후드 윈드브레이커 & 등 뒤 후드 볼륨
+    // 등 뒤 접힌 후드(Hood)
+    dot(12, 15, 7, 6, COL.out);
+    dot(13, 16, 5, 4, COL.jktDark);
+    dot(14, 16, 3, 2, COL.jktMain);
+
+    // 자켓 몸통 외곽선 (살짝 앞으로 숙인 역동적 각도)
+    dot(15, 18, 12, 14, COL.out);
+    dot(16, 17, 10, 15, COL.out);
+    // 자켓 내부 채우기
+    dot(16, 18, 10, 13, COL.jktMain);
+    dot(16, 18, 3, 13, COL.jktDark);   // 등 쪽 음영
+    dot(19, 18, 5, 11, COL.jktLight);  // 가슴/어깨 밝은 하이라이트
+    dot(24, 19, 1, 12, COL.zipper);    // 앞 지퍼 라인
+    dot(16, 30, 10, 1, COL.jktDark);   // 밑단 시보리
+
+    // 5. 머리 & 빨간 러닝 캡 (1:1 비율의 자연스러운 옆모습 두상)
+    // 목
+    dot(19, 14, 6, 4, COL.out);
+    dot(20, 15, 4, 3, COL.skinShade);
+
+    // 두상 & 얼굴 외곽선
+    dot(16, 4, 13, 12, COL.out);
+    dot(15, 5, 15, 10, COL.out);
+
+    // 얼굴 피부 (옆모습 + 코 라인)
+    dot(19, 7, 9, 8, COL.skinMain);
+    dot(28, 10, 2, 3, COL.out);
+    dot(28, 10, 1, 2, COL.skinMain); // 오똑한 코끝
+    dot(19, 13, 8, 2, COL.skinShade); // 턱선 음영
+
+    // 눈동자 (선명한 16비트 세로 눈 + 하이라이트)
+    dot(25, 9, 2, 3, COL.out);
+    dot(25, 9, 1, 1, '#ffffff');
+    dot(24, 8, 3, 1, COL.hairDark); // 눈썹
+
+    // 뒷머리 & 구레나룻 (모자 아래로 나온 갈색 머리결)
+    dot(15, 7, 5, 7, COL.out);
+    dot(16, 8, 4, 5, COL.hairDark);
+    dot(17, 8, 3, 4, COL.hairMain);
+    dot(20, 9, 2, 3, COL.skinMain); // 귀
+    dot(22, 7, 6, 2, COL.hairDark); // 앞머리 그늘
+
+    // 빨간 러닝 캡 (돔 + 앞으로 뻗은 챙)
+    dot(16, 1, 12, 6, COL.out);
+    dot(15, 2, 17, 5, COL.out);
+    dot(28, 4, 6, 3, COL.out);      // 모자 챙 외곽선
+    dot(16, 2, 11, 4, COL.capMain); // 모자 돔 기본
+    dot(18, 2, 7, 2, COL.capLight); // 모자 윗면 하이라이트
+    dot(16, 5, 11, 1, COL.capDark); // 모자 밴드 음영
+    dot(26, 4, 7, 2, COL.capMain);  // 앞으로 뻗은 빨간 챙
+    dot(27, 5, 6, 1, COL.capDark);  // 챙 아랫면 음영
+
+    // 6. 앞쪽 팔 (주먹을 쥐고 힘차게 흔드는 팔)
+    drawLimb(p.frontShld[0], p.frontShld[1], p.frontElbow[0], p.frontElbow[1], 4, COL.jktMain, COL.jktLight);
+    drawLimb(p.frontElbow[0], p.frontElbow[1], p.frontHand[0], p.frontHand[1], 3, COL.jktMain, COL.jktLight);
+    dot(p.frontHand[0] - 1, p.frontHand[1] - 1, 5, 5, COL.out);
+    dot(p.frontHand[0], p.frontHand[1], 3, 3, COL.skinMain);
+  }
+
+  function buildRunnerSprites() {
+    runnerFrames = [];
+    for (let f = 0; f < 6; f++) {
+      // 1x1 정방형 도트 해상도(52x58)로 그려서 뭉개짐 없이 시안 A 그대로 표현
+      const { canvas: off, ctx: c } = createOffscreenCanvas(52, 58);
+      drawRunnerFrameOptionA(c, f);
+      runnerFrames.push(off);
+    }
+  }
+
+  // ============================================================================
+  // 3. 게임 상태 & 단일 1-2-3-STEP! 리듬 타이머 설정
+  // ============================================================================
+  let isPlayingRun = false; // 첫 STEP! 버튼을 누르기 전에는 대기 화면
+  let isStageEnded = false;
+
+  let hp = 5;
+  const maxHp = 5;
+  let score = 0;
+  let progress = 0;
+
+  let totalCycles = 0;
+  let successCycles = 0;
+  let combo = 0;
+
+  let frameTick = 0;
+  let scrollDistance = 0;
+  let pillarFlashAlpha = 0;
+
+  // 112 BPM 단일 마스터 시계
+  const BPM = 112;
+  const BEAT_MS = (60 / BPM) * 1000;
+  const MEASURE_MS = BEAT_MS * 4;
+
+  const JUDGE_PERFECT = 95;
+  const JUDGE_GREAT = 185;
+  const JUDGE_GOOD = 265;
+
+  let rhythmStartMs = performance.now();
+  let lastBeatIndex = -1;
+  let measureHitMap = {};
+  let measureMissMap = {};
+
+  const PILLAR_X = 48;
+  const PILLAR_W = 28;
+  // 심박수(ECG) Y좌표는 캔버스 하단 트랙 아래쪽 차선으로 동적 계산됨 (캐릭터와 절대 겹치지 않음)
+  let currentEcgY = 242;
+  const PX_PER_BEAT = 36;
+  const PX_PER_MS = PX_PER_BEAT / BEAT_MS;
+
+  let particles = [];
+  let floatingLabels = [];
+
+  const TEMPTATIONS = [
+    { title: '🍜 라면 냄새가 난다..', sub: '한강 편의점 보글보글 라면의 유혹 🤤' },
+    { title: '🍗 치킨과 맥주 한잔', sub: '사람들이 치맥을 하고 있어.. 🍻 맛있겠다..' },
+    { title: '💦 조금 힘든데..?', sub: '강변 벤치에 앉아서 꿀같은 휴식을 🪑💤' },
+    { title: '📱 휴대폰이 울린듯..!', sub: '잠깐 멈춰서 메시지만 💬 확인해 볼까?' }
+  ];
+
+  let popupInfo = {
+    visible: true,
+    dodgeRemaining: 1,
+    respawnMeasure: 2
+  };
+
+  // ============================================================================
+  // 4. Web Audio API 레트로 사운드 합성기
+  // ============================================================================
+  let audioCtx = null;
+
+  function unlockAudio() {
+    try {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          audioCtx = new AudioContextClass();
+        }
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    } catch (e) {}
+  }
+
+  function playRetroSound(freq, duration = 0.08, type = 'square', vol = 0.1, slideFreq = null) {
+    try {
+      if (!audioCtx) unlockAudio();
+      if (!audioCtx) return;
+
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      if (slideFreq) {
+        osc.frequency.exponentialRampToValueAtTime(slideFreq, now + duration);
+      }
+
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + duration);
+    } catch (e) {}
+  }
+
+  // ============================================================================
+  // 5. 모바일 진동(Haptic) & 하트 맥박 피드백
+  // ============================================================================
+  function triggerRhythmHaptic(beatInMeasure) {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try {
+        navigator.vibrate(beatInMeasure === 4 ? 55 : 20);
+      } catch (e) {}
+    }
+
+    const heartsEl = document.getElementById('heartsContainer');
+    if (heartsEl) {
+      heartsEl.classList.remove('heart-pulse');
+      void heartsEl.offsetWidth;
+      heartsEl.classList.add('heart-pulse');
+    }
+  }
+
+  // ============================================================================
+  // 6. 상단 HUD (하트 · 스코어 · 10칸 게이지 · 진척도) & 시간대 전환
+  // ============================================================================
+  function makeHeartSvg(state) {
+    const leftFill = (state === 'full' || state === 'half') ? '#ff4d79' : '#323752';
+    const rightFill = (state === 'full') ? '#ff4d79' : '#323752';
+    const shineFill = (state === 'empty') ? '#464d70' : '#ff9ebb';
+    return `<svg width="20" height="18" viewBox="0 0 11 10"><path d="M2 0h3v1h1V0h3v1h1v1h1v4h-1v1H9v1H8v1H7v1H4V9H3V8H2V7H1V6H0V2h1V1h1V0z" fill="#0d0e1a"/><path d="M2 1h3v1h1v7H4V8H3V7H2V6H1V2h1V1z" fill="${leftFill}"/><path d="M6 1h3v1h1v4H9v1H8v1H7v1H6V1z" fill="${rightFill}"/><rect x="2" y="2" width="2" height="1" fill="${shineFill}"/><rect x="2" y="3" width="1" height="1" fill="${shineFill}"/></svg>`;
+  }
+
+  function updateHudUI() {
+    if (selectedThemeMode === 'auto') {
+      if (!isPlayingRun) {
+        activeTimeOfDay = 'morning';
+      } else if (progress < 34) {
+        activeTimeOfDay = 'morning';
+      } else if (progress < 67) {
+        activeTimeOfDay = 'sunset';
+      } else {
+        activeTimeOfDay = 'night';
+      }
+    } else {
+      activeTimeOfDay = selectedThemeMode;
+    }
+
+    const heartsEl = document.getElementById('heartsContainer');
+    if (heartsEl) {
+      let html = '';
+      for (let i = 1; i <= maxHp; i++) {
+        html += makeHeartSvg(i <= hp ? 'full' : 'empty');
+      }
+      heartsEl.innerHTML = html;
+    }
+
+    const scoreEl = document.getElementById('scoreDisplay');
+    if (scoreEl) {
+      scoreEl.innerText = String(score).padStart(6, '0');
+    }
+
+    const progEl = document.getElementById('progressDisplay');
+    if (progEl) {
+      progEl.innerText = `${progress}%`;
+    }
+
+    const gaugeEl = document.getElementById('gaugeContainer');
+    if (gaugeEl) {
+      const filledCount = Math.max(0, Math.min(10, Math.round(progress / 10)));
+      let gHtml = '';
+      for (let i = 0; i < 10; i++) {
+        gHtml += `<div class="${i < filledCount ? 'gauge-cell-on' : 'gauge-cell-off'}"></div>`;
+      }
+      gaugeEl.innerHTML = gHtml;
+    }
+  }
+
+  function cycleTimeTheme(e) {
+    if (e) e.stopPropagation();
+    unlockAudio();
+    const order = ['morning', 'sunset', 'night'];
+    const nextIdx = (order.indexOf(activeTimeOfDay) + 1) % order.length;
+    selectedThemeMode = order[nextIdx];
+    activeTimeOfDay = selectedThemeMode;
+    playRetroSound(660, 0.05, 'triangle', 0.08);
+    updateHudUI();
+  }
+
+  // ============================================================================
+  // 7. 5단 분리 패럴랙스 배경 + 6프레임 러너 + 시안 판정 기둥 & 하향된 초록 심박수 렌더링
+  // ============================================================================
+  function drawSeamlessTile(tileCanvas, speedMultiplier, destY) {
+    const tileW = tileCanvas.width;
+    const offset = Math.floor(scrollDistance * speedMultiplier) % tileW;
+    const startX = -offset;
+
+    ctx.drawImage(tileCanvas, startX, Math.floor(destY));
+    if (startX + tileW < VIEW_W) {
+      ctx.drawImage(tileCanvas, startX + tileW, Math.floor(destY));
+    }
+  }
+
+  function renderGameCanvas(now) {
+    const tiles = layerTiles[activeTimeOfDay] || layerTiles.night;
+
+    // 캔버스 세로 높이(VIEW_H)에 맞춰 5개 레이어 위치를 빈틈없이 배치
+    const bushY  = VIEW_H - 54;          // 최전경 수풀 (하단 고정)
+    const trackY = bushY - 92;           // 우레탄 러닝 트랙 (노란 중앙선: trackY + 48)
+    const waterY = trackY - 50;          // 한강 물결
+    const cityY  = Math.max(0, waterY - 124); // 서울 랜드마크 스카이라인
+
+    // Layer 1: 하늘 (0.1x)
+    ctx.fillStyle = activeTimeOfDay === 'morning' ? '#3fa7f5' : (activeTimeOfDay === 'sunset' ? '#24174a' : '#130f33');
+    ctx.fillRect(0, 0, VIEW_W, cityY + 126);
+    drawSeamlessTile(tiles.sky, 0.1, cityY);
+
+    // Layer 2: 서울 도시 & 랜드마크 (0.3x)
+    drawSeamlessTile(tiles.city, 0.3, cityY);
+
+    // Layer 3: 한강 물결 & 반사광 (0.5x)
+    drawSeamlessTile(tiles.water, 0.5, waterY);
+
+    // Layer 4: 우레탄 러닝 트랙 (1.0x)
+    drawSeamlessTile(tiles.track, 1.0, trackY);
+
+    // 시안 A 6프레임 도트 러너 캐릭터 & 발밑 그림자 (노란 중앙선 위쪽 상단 차선에서 주행)
+    const runnerX = 88;
+    const runnerFootY = trackY + 46; // 노란 중앙선(trackY + 48) 바로 위
+    const runnerY = runnerFootY - 54;
+    const currentSpriteIndex = Math.floor(frameTick / 5) % runnerFrames.length;
+
+    // 발밑 트랙 그림자
+    px(ctx, runnerX + 10, runnerFootY - 2, 32, 4, 'rgba(10, 6, 18, 0.45)');
+    px(ctx, runnerX + 14, runnerFootY - 3, 24, 5, 'rgba(10, 6, 18, 0.68)');
+
+    ctx.drawImage(runnerFrames[currentSpriteIndex], runnerX, runnerY);
+
+    // Layer 5: 최전경 잔디밭 & 수풀 (1.3x)
+    drawSeamlessTile(tiles.bush, 1.3, bushY);
+
+    // FIX 2: 심박수(ECG) 라인을 노란 중앙선(trackY + 48) 및 캐릭터 발(trackY + 46)보다 훨씬 아래인 하단 차선(trackY + 70)에 배치
+    currentEcgY = trackY + 70;
+
+    // 리듬 닥터식 반투명 시안 판정 기둥 & 초록 네온 심박수(ECG) 라인
+    drawPillarAndEcgWave(now, bushY);
+  }
+
+  function drawPillarAndEcgWave(now, bushY) {
+    const elapsed = now - rhythmStartMs; // 마이너스 딜레이 허용하여 박자가 우측에서 다가오게 함
+    const curMeasure = Math.floor(elapsed / MEASURE_MS);
+
+    // 좌측 반투명 시안색 수직 판정 기둥
+    const pLeft = PILLAR_X - Math.floor(PILLAR_W / 2);
+    const pTop = 42;
+    const pHeight = (bushY + 28) - pTop;
+
+    const pGrad = ctx.createLinearGradient(pLeft, 0, pLeft + PILLAR_W, 0);
+    pGrad.addColorStop(0, 'rgba(0, 240, 255, 0.44)');
+    pGrad.addColorStop(0.5, 'rgba(80, 255, 240, 0.24)');
+    pGrad.addColorStop(1, 'rgba(0, 240, 255, 0.44)');
+    ctx.fillStyle = pGrad;
+    ctx.fillRect(pLeft, pTop, PILLAR_W, pHeight);
+
+    px(ctx, pLeft, pTop, 2, pHeight, '#5cf8ff');
+    px(ctx, pLeft + PILLAR_W - 2, pTop, 2, pHeight, '#5cf8ff');
+    px(ctx, pLeft, pTop + pHeight - 2, PILLAR_W, 2, '#5cf8ff');
+
+    if (pillarFlashAlpha > 0) {
+      ctx.fillStyle = `rgba(140, 245, 39, ${pillarFlashAlpha})`;
+      ctx.fillRect(pLeft + 2, pTop, PILLAR_W - 4, pHeight);
+      pillarFlashAlpha = Math.max(0, pillarFlashAlpha - 0.04);
+    }
+
+    // 기둥과 하향된 심박수 라인이 만나는 지점의 원형 시안-그린 네온 글로우
+    const glow = ctx.createRadialGradient(PILLAR_X, currentEcgY, 2, PILLAR_X, currentEcgY, 22);
+    glow.addColorStop(0, 'rgba(150, 255, 180, 0.88)');
+    glow.addColorStop(0.5, 'rgba(0, 240, 255, 0.38)');
+    glow.addColorStop(1, 'rgba(0, 240, 255, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(PILLAR_X, currentEcgY, 22, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 초록색 네온 심박수(ECG) 파형 계산
+    const waveY = new Float32Array(VIEW_W);
+
+    if (!isPlayingRun) {
+      // 대기 화면에서는 심박수 파형 없이 평탄한 초록 선(----)만 표시
+    } else {
+      for (let m = curMeasure - 1; m <= curMeasure + 2; m++) {
+        if (m < 0) continue; // 음수 마디(카운트다운)는 그리지 않아 초반에는 평탄한 선(----)만 표시됨
+        for (let b = 1; b <= 4; b++) {
+          const beatExactMs = rhythmStartMs + (m * MEASURE_MS) + ((b - 1) * BEAT_MS);
+          const diffMs = beatExactMs - now;
+          const xPos = PILLAR_X + (diffMs * PX_PER_MS);
+
+          if (xPos < -40 || xPos > VIEW_W + 40) continue;
+
+          if (b === 1 || b === 2) {
+            stampTinyPulse(waveY, xPos);
+          } else if (b === 3) {
+            stampSmallWave(waveY, xPos + 8, 0.72);
+          } else if (b === 4) {
+            stampTallStepSpike(waveY, xPos, 0.92);
+          }
+        }
+      }
+    }
+
+    // 외곽 초록 네온 후광 선
+    ctx.save();
+    ctx.strokeStyle = 'rgba(35, 255, 65, 0.45)';
+    ctx.lineWidth = 5;
+    ctx.lineJoin = 'miter';
+    ctx.beginPath();
+    for (let x = 0; x < VIEW_W; x++) {
+      const py = currentEcgY + waveY[x];
+      if (x === 0) ctx.moveTo(x, py);
+      else ctx.lineTo(x, py);
+    }
+    ctx.stroke();
+
+    // 코어 형광 그린 심박수 선
+    ctx.strokeStyle = '#68ff4b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = 0; x < VIEW_W; x++) {
+      const py = currentEcgY + waveY[x];
+      if (x === 0) ctx.moveTo(x, py);
+      else ctx.lineTo(x, py);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // 타격 파티클 & 판정 텍스트 렌더링
+    particles.forEach(pt => {
+      px(ctx, pt.x, pt.y, 3, 3, pt.color);
+      pt.x += pt.vx;
+      pt.y += pt.vy;
+      pt.life--;
+    });
+    particles = particles.filter(pt => pt.life > 0);
+
+    floatingLabels.forEach(fl => {
+      ctx.save();
+      ctx.font = '900 10px "Press Start 2P", monospace';
+      ctx.fillStyle = '#08071a';
+      ctx.fillText(fl.text, fl.x + 2, fl.y + 2);
+      ctx.fillStyle = fl.color;
+      ctx.fillText(fl.text, fl.x, fl.y);
+      ctx.restore();
+      fl.y -= 0.65;
+      fl.life--;
+    });
+    floatingLabels = floatingLabels.filter(fl => fl.life > 0);
+  }
+
+  function stampTinyPulse(buf, center) {
+    const kernel = [0, -2, -5, 3, 0];
+    const half = Math.floor(kernel.length / 2);
+    const cInt = Math.round(center);
+    for (let i = 0; i < kernel.length; i++) {
+      const idx = cInt - half + i;
+      if (idx >= 0 && idx < VIEW_W) {
+        buf[idx] += kernel[i];
+      }
+    }
+  }
+
+  function stampSmallWave(buf, center, scale) {
+    const kernel = [0, -3, -8, 3, 6, -13, 10, -4, 0];
+    const half = Math.floor(kernel.length / 2);
+    const cInt = Math.round(center);
+    for (let i = 0; i < kernel.length; i++) {
+      const idx = cInt - half + i;
+      if (idx >= 0 && idx < VIEW_W) {
+        buf[idx] += kernel[i] * scale;
+      }
+    }
+  }
+
+  function stampTallStepSpike(buf, center, scale) {
+    const kernel = [0, -4, 5, -13, -24, 17, 7, -10, -3, 0];
+    const half = Math.floor(kernel.length / 2);
+    const cInt = Math.round(center);
+    for (let i = 0; i < kernel.length; i++) {
+      const idx = cInt - half + i;
+      if (idx >= 0 && idx < VIEW_W) {
+        buf[idx] += kernel[i] * scale;
+      }
+    }
+  }
+
+  // ============================================================================
+  // 8 & 9. 단일 1-2-3-STEP! 리듬 엔진 및 STEP! 터치 판정 처리
+  // ============================================================================
+  function spawnHitSpark(x, y, color) {
+    for (let i = 0; i < 10; i++) {
+      const angle = (Math.PI * 2 * i) / 10;
+      const spd = 1.2 + Math.random() * 1.8;
+      particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd - 0.5,
+        color,
+        life: 14 + Math.floor(Math.random() * 6)
+      });
+    }
+  }
+
+  function addFloatingLabel(text, color) {
+    floatingLabels.push({
+      x: PILLAR_X - 18,
+      y: currentEcgY - 26,
+      text,
+      color,
+      life: 26
+    });
+  }
+
+  function updateRhythmEngine(now) {
+    if (!isPlayingRun || isStageEnded) return;
+
+    const elapsed = now - rhythmStartMs;
+    const globalBeatIdx = Math.floor(elapsed / BEAT_MS);
+    const curMeasure = Math.floor(elapsed / MEASURE_MS);
+
+    if (globalBeatIdx > lastBeatIndex) {
+      lastBeatIndex = globalBeatIdx;
+
+      // 음수 인덱스(시작 딜레이 중)도 나머지 연산이 양수가 되도록 처리하여 소리/진동 출력
+      const beatInMeasure = (((globalBeatIdx % 4) + 4) % 4) + 1;
+
+      triggerRhythmHaptic(beatInMeasure);
+
+      // 모바일 스피커에서 잘 들리도록 전자음(Square)으로 변경하고 볼륨 업
+      if (beatInMeasure < 4) {
+        playRetroSound(440, 0.05, 'square', 0.1);
+      } else {
+        playRetroSound(660, 0.07, 'square', 0.12);
+      }
+
+      if (!popupInfo.visible && curMeasure >= popupInfo.respawnMeasure && beatInMeasure === 1) {
+        spawnTemptationPopup();
+      }
+    }
+
+    // 4번째 STEP! 박자를 완전히 놓쳤을 때만 HP 차감
+    for (let m = Math.max(0, curMeasure - 1); m <= curMeasure; m++) {
+      if (measureHitMap[m] || measureMissMap[m]) continue;
+
+      const targetBeat4Ms = rhythmStartMs + (m * MEASURE_MS) + (3 * BEAT_MS);
+      if (now - targetBeat4Ms > JUDGE_GOOD) {
+        measureMissMap[m] = true;
+        totalCycles++;
+        combo = 0;
+        hp = Math.max(0, hp - 1);
+
+        addFloatingLabel('MISS', '#ff4d6d');
+        playRetroSound(150, 0.16, 'sawtooth', 0.12, 95);
+
+        const screenEl = document.getElementById('screenContainer');
+        if (screenEl) {
+          screenEl.classList.remove('screen-shake');
+          void screenEl.offsetWidth;
+          screenEl.classList.add('screen-shake');
+        }
+
+        updateHudUI();
+        checkStageFinished();
+      }
+    }
+  }
+
+  function handleStepPress() {
+    unlockAudio();
+    if (isStageEnded) return;
+
+    const btn = document.getElementById('stepBtn');
+    if (btn) {
+      btn.classList.add('pressed');
+      setTimeout(() => btn.classList.remove('pressed'), 90);
+    }
+
+    // 첫 터치 시 프리뷰에서 본 게임(0% 아침 여의도 구간)으로 출발
+    if (!isPlayingRun) {
+      isPlayingRun = true;
+      hp = 5;
+      score = 0;
+      progress = 0;
+      combo = 0;
+      totalCycles = 0;
+      successCycles = 0;
+      scrollDistance = 480;
+      measureHitMap = {};
+      measureMissMap = {};
+      
+      // 3마디(약 6.4초) 뒤부터 판정 기둥에 첫 박자가 도달함 (그동안 소리로 리듬 익히기)
+      rhythmStartMs = performance.now() + (MEASURE_MS * 3); 
+      lastBeatIndex = Math.floor(-(MEASURE_MS * 3) / BEAT_MS) - 1;
+      
+      popupInfo.visible = false;
+      document.getElementById('temptationPopup').classList.add('hidden');
+      
+      // 첫 팝업은 진짜 박자가 시작되고 나서 4마디 뒤 (약 15초 시점)에 등장
+      popupInfo.respawnMeasure = 4; 
+      
+      const startOverlay = document.getElementById('startScreenOverlay');
+      if (startOverlay) startOverlay.classList.add('hidden');
+
+      playRetroSound(587.33, 0.08, 'square', 0.1, 880);
+      updateHudUI();
+      return;
+    }
+
+    const now = performance.now();
+    const elapsed = Math.max(0, now - rhythmStartMs);
+    const approxMeasure = Math.round((elapsed - 3 * BEAT_MS) / MEASURE_MS);
+
+    let bestMeasure = -1;
+    let minAbsDiff = Infinity;
+
+    for (let m = Math.max(0, approxMeasure - 1); m <= approxMeasure + 1; m++) {
+      if (measureHitMap[m] || measureMissMap[m]) continue;
+      const targetMs = rhythmStartMs + (m * MEASURE_MS) + (3 * BEAT_MS);
+      const diff = Math.abs(now - targetMs);
+      if (diff < minAbsDiff) {
+        minAbsDiff = diff;
+        bestMeasure = m;
+      }
+    }
+
+    // 4번째 박자 판정 구간 내 입력 시 성공 처리 (1~3박자 자유 터치 시에는 감점/경고 없음)
+    if (bestMeasure >= 0 && minAbsDiff <= JUDGE_GOOD) {
+      measureHitMap[bestMeasure] = true;
+      totalCycles++;
+      successCycles++;
+      combo++;
+      pillarFlashAlpha = 0.55;
+
+      if (minAbsDiff <= JUDGE_PERFECT) {
+        score += 300 + combo * 20;
+        progress = Math.min(100, progress + 8);
+        addFloatingLabel('PERFECT!', '#8cf527');
+        spawnHitSpark(PILLAR_X, currentEcgY, '#8cf527');
+        playRetroSound(783.99, 0.09, 'square', 0.11, 1046.5);
+      } else if (minAbsDiff <= JUDGE_GREAT) {
+        score += 200 + combo * 10;
+        progress = Math.min(100, progress + 7);
+        addFloatingLabel('GREAT!', '#3df5ff');
+        spawnHitSpark(PILLAR_X, currentEcgY, '#3df5ff');
+        playRetroSound(659.25, 0.08, 'square', 0.1, 880);
+      } else {
+        score += 100;
+        progress = Math.min(100, progress + 6);
+        addFloatingLabel('GOOD', '#ffe033');
+        spawnHitSpark(PILLAR_X, currentEcgY, '#ffe033');
+        playRetroSound(523.25, 0.07, 'triangle', 0.09, 659.25);
+      }
+
+      updateHudUI();
+      checkStageFinished();
+    } else {
+      // 1~3박자에 미리 버튼을 눌러도 체력 차감이나 경고 문구 없이 가벼운 탭 효과음만 재생
+      playRetroSound(330, 0.025, 'triangle', 0.035);
+    }
+  }
+
+  // ============================================================================
+  // 10. 유혹 팝업창 [X] 닫기 & 도망 기믹 (심박수 라인 위에서 방해하도록 위치 고정)
+  // ============================================================================
+  function closeTemptationPopup(e) {
+    if (e) e.stopPropagation();
+    unlockAudio();
+    if (!popupInfo.visible) return;
+
+    const popupEl = document.getElementById('temptationPopup');
+    const barEl = document.getElementById('popupHeaderBar');
+
+    if (popupInfo.dodgeRemaining > 0) {
+      popupInfo.dodgeRemaining--;
+      // 도망갈 때도 심박수 라인을 가리도록 왼쪽 판정 기둥(48px) 근처(30~50%)로 이동 한정
+      const nextTop = 67 + Math.floor(Math.random() * 10);
+      const nextLeft = 30 + Math.floor(Math.random() * 20);
+      popupEl.style.top = `${nextTop}%`;
+      popupEl.style.left = `${nextLeft}%`;
+      barEl.style.justifyContent = Math.random() > 0.5 ? 'flex-start' : 'flex-end';
+      playRetroSound(620, 0.06, 'square', 0.09, 820);
+    } else {
+      popupInfo.visible = false;
+      popupEl.classList.add('hidden');
+      const now = performance.now();
+      const curM = Math.floor(Math.max(0, now - rhythmStartMs) / MEASURE_MS);
+      popupInfo.respawnMeasure = curM + 2;
+      score += 150;
+      playRetroSound(987.7, 0.08, 'sine', 0.11, 1318.5);
+      updateHudUI();
+    }
+  }
+
+  function spawnTemptationPopup() {
+    const item = TEMPTATIONS[Math.floor(Math.random() * TEMPTATIONS.length)];
+    const popupEl = document.getElementById('temptationPopup');
+    const barEl = document.getElementById('popupHeaderBar');
+
+    document.getElementById('popupMainTitle').innerText = item.title;
+    document.getElementById('popupSubTitle').innerText = item.sub;
+
+    popupInfo.visible = true;
+    popupInfo.dodgeRemaining = (progress >= 40) ? 1 : 0;
+    // 캐릭터 아래쪽의 초록색 심박수 라인과 좌측 판정 기둥을 완벽히 덮는 위치로 조정
+    popupEl.style.top = '73%';
+    popupEl.style.left = '40%';
+    barEl.style.justifyContent = 'flex-end';
+    popupEl.classList.remove('hidden');
+  }
+
+  function dismissPopupViaDpad(e) {
+    if (e) e.stopPropagation();
+    if (popupInfo.visible) {
+      closeTemptationPopup();
+    }
+  }
+
+  // ============================================================================
+  // 11. 완주 / 재도전 모달 & 메인 애니메이션 루프
+  // ============================================================================
+  function checkStageFinished() {
+    if (isStageEnded) return;
+    if (progress >= 100 || hp <= 0) {
+      isStageEnded = true;
+      const modal = document.getElementById('resultModal');
+      const acc = totalCycles > 0
+        ? Math.min(100, ((successCycles / totalCycles) * 100)).toFixed(1)
+        : '100.0';
+
+      document.getElementById('resultAccuracy').innerText = `${acc}%`;
+      document.getElementById('resultScore').innerText = String(score).padStart(6, '0');
+
+      if (progress >= 100) {
+        document.getElementById('resultBadge').innerText = 'HAN RIVER COMPLETE!';
+        document.getElementById('resultTitle').innerText = '🎉 한강 종주 러닝 100% 완주!';
+        document.getElementById('resultSubtitle').innerText = '';
+        document.getElementById('resultSubtitle').style.display = 'none';
+        playRetroSound(523.25, 0.18, 'square', 0.14, 1046.5);
+      } else {
+        document.getElementById('resultBadge').innerText = 'TRY AGAIN!';
+        document.getElementById('resultTitle').innerText = '🍜 한강 야식 유혹에 멈췄습니다!';
+        document.getElementById('resultSubtitle').innerText = `완주까지 ${100 - progress}% 남았습니다. 다시 달려볼까요?`;
+        document.getElementById('resultSubtitle').style.display = 'block';
+      }
+
+      modal.classList.remove('hidden');
+    }
+  }
+
+  function restartGame() {
+    unlockAudio();
+    isStageEnded = false;
+    isPlayingRun = true;
+    selectedThemeMode = 'auto';
+    hp = 5;
+    score = 0;
+    progress = 0;
+    combo = 0;
+    totalCycles = 0;
+    successCycles = 0;
+    scrollDistance = 480;
+    measureHitMap = {};
+    measureMissMap = {};
+    
+    // 재도전 시에도 3마디(약 6.4초) 딜레이 적용
+    rhythmStartMs = performance.now() + (MEASURE_MS * 3); 
+    lastBeatIndex = Math.floor(-(MEASURE_MS * 3) / BEAT_MS) - 1;
+    
+    popupInfo.visible = false;
+    document.getElementById('temptationPopup').classList.add('hidden');
+    popupInfo.respawnMeasure = 4;
+
+    document.getElementById('resultModal').classList.add('hidden');
+    updateHudUI();
+  }
+
+  function mainGameLoop(now) {
+    frameTick++;
+    if (isPlayingRun && !isStageEnded) {
+      scrollDistance += 1.15;
+    }
+
+    updateRhythmEngine(now);
+    renderGameCanvas(now);
+
+    requestAnimationFrame(mainGameLoop);
+  }
+
+  // 이벤트 리스너: 초록색 STEP! 버튼뿐 아니라 게임 화면(트랙)을 직접 터치해도 STEP! 작동
+  document.getElementById('stepBtn').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleStepPress();
+  });
+
+  document.getElementById('screenContainer').addEventListener('pointerdown', (e) => {
+    if (e.target.closest('#temptationPopup') || e.target.closest('#resultModal')) return;
+    e.preventDefault();
+    handleStepPress();
+  });
+
+  document.getElementById('popupCloseBtn').addEventListener('pointerdown', closeTemptationPopup);
+
+  document.getElementById('retryBtn').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    restartGame();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && !e.repeat) {
+      e.preventDefault();
+      handleStepPress();
+    }
+  });
+
+  // 확실한 오디오 권한 해제를 위한 전역 터치 이벤트 (모바일 사운드 방어벽 우회)
+  const forceAudioUnlock = () => {
+    unlockAudio();
+    if (audioCtx && audioCtx.state === 'running') {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      gain.gain.value = 0; // 소리 없는 빈 오디오 출력
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.01);
+      document.removeEventListener('pointerdown', forceAudioUnlock);
+      document.removeEventListener('touchstart', forceAudioUnlock);
+    }
+  };
+  document.addEventListener('pointerdown', forceAudioUnlock);
+  document.addEventListener('touchstart', forceAudioUnlock);
+
+  // 즉시 초기화 실행 (1:1 정사각형 픽셀 비율 동기화 포함)
+  syncSquarePixelAspect();
+  initAllBackgroundLayers();
+  buildRunnerSprites();
+  updateHudUI();
+  requestAnimationFrame(mainGameLoop);
+</script>
+</body>
+</html>
